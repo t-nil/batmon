@@ -18,16 +18,17 @@ pub fn main() -> Result<()> {
 
     let Some(sum) = std::iter::zip(m.dataset().iter(), m.dataset().iter().skip(1))
       .map(|(before, after)| after.power - before.power)
-      .reduce(std::ops::Add::add) // TODO look into impl Sum for mWh etc and using itertools::sum()
-      else {
-        return Ok(());
-      };
+      .reduce(std::ops::Add::add)
+    // TODO look into impl Sum for mWh etc and using itertools::sum()
+    else {
+      return Ok(());
+    };
 
     #[cfg(feature = "debug_println")]
     eprintln!("dbg after return");
 
     let count = m.dataset().len();
-    let elapsed_secs = (count * DELTA_T.as_millis() as usize) as f32 / 1000.0;
+    let elapsed_secs = ((count - 1) * DELTA_T.as_millis() as usize) as f32 / 1000.0; // n samples mean n-1 diffs
     let avg = sum / elapsed_secs;
 
     // clear
