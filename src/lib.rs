@@ -1,11 +1,12 @@
 #![deny(clippy::all)]
 #![warn(clippy::pedantic)]
+#![allow(clippy::default_trait_access)]
 
 use std::{
-    collections::VecDeque, fmt::Display, fs, marker::PhantomData, path::Path, thread::sleep,
+    collections::VecDeque, fs, marker::PhantomData, path::Path, thread::sleep,
 };
 
-use chrono::{Date, DateTime, Duration, Local};
+use chrono::{DateTime, Duration, Local};
 use derive_more::{Add, Display, Div, From, Mul, Sub};
 
 use anyhow::{Context, Result};
@@ -29,8 +30,8 @@ impl From<μWh> for mWh {
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct Datapoint {
     pub power: mWh,
-    pub time_delta: Duration,
-} //
+    pub time: DateTime<Local>,
+}
 
 #[derive(Debug)]
 pub struct Measurement<'a, SourceUnit> {
@@ -61,6 +62,13 @@ where
         }
     }
 
+    /// Start measuring at given intervals, calling `action` to process the
+    /// intermediate values.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error of the callback if that errors.
+    ///
     pub fn measure(&mut self, mut action: impl FnMut(&Self) -> Result<()>) -> Result<()> {
         self.start_time = Local::now();
         self.dataset.reserve_exact(self.num_samples);
@@ -69,7 +77,7 @@ where
 
         loop {
             last = Local::now();
-            let dp = self._read_datapoint()?;
+            let dp = self.read_datapoint()?;
 
             // update dataset
             self.dataset.truncate(self.num_samples - 1); // so the next push gets us at numSamples
@@ -79,23 +87,25 @@ where
             action(self)?;
 
             // sleep till next measure
-            sleep(dbg!(self._how_long_to_sleep(last).to_std()?));
+            sleep(dbg!(self.how_long_to_sleep(last).to_std()?));
         }
     }
 
-    fn _read_datapoint(&self) -> Result<Datapoint> {
+    fn read_datapoint(&self) -> Result<Datapoint> {
         let raw = fs::read_to_string(self.source)?;
         let numeric: u32 = str::parse(raw.trim()).with_context(|| format!("str: {raw}"))?; // microwatthours as integer, more than 4mrd would mean more than 4kWh of capacity
-        let with_unit: SourceUnit = SourceUnit::from(numeric as f32);
+        #[allow(clippy::cast_precision_loss)]
+        let value = numeric as f32;
+        let with_unit: SourceUnit = SourceUnit::from(value);
 
         let dp = Datapoint {
             power: with_unit.into(),
-            time_delta: Local::now() - self.start_time,
+            time: Local::now(),
         };
         Ok(dp)
     }
 
-    fn _how_long_to_sleep(&self, _last: DateTime<Local>) -> Duration {
+    fn how_long_to_sleep(&self, _last: DateTime<Local>) -> Duration {
         // hack for missing modulo
         let mut remainder = Local::now();
         while remainder > self.start_time {
