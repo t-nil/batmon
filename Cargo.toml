@@ -13,10 +13,12 @@ dbg_println = []
 [dependencies]
 anyhow = { version = "1.0.75", features = ["backtrace"] }
 chrono = "0.4.28"
+clap = { version = "4.4.4", features = ["derive", "wrap_help", "unicode"] }
 derive_more = "0.99.17"
 itertools = "0.11.0"
 num-traits = "0.2.16"
 #plotters = { version = "0.3.5", features = ["datetime"] }
+textplots = "0.8"
 
 [lib]
 name = "batmon"
