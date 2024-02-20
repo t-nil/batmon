@@ -3,22 +3,40 @@
 #![allow(clippy::default_trait_access)]
 
 use std::{
-    collections::VecDeque, fs, marker::PhantomData, path::Path, thread::sleep,
+    collections::VecDeque,
+    fmt::{Display, Write},
+    fs,
+    marker::PhantomData,
+    ops::Deref,
+    path::Path,
+    thread::sleep,
 };
 
+use anyhow::{Context, Result};
 use chrono::{DateTime, Duration, Local};
 use derive_more::{Add, Display, Div, From, Mul, Sub};
 
-use anyhow::{Context, Result};
+macro_rules! display_suffix {
+    ($target:ty) => {
+        impl Display for $target {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                self.0
+                    .fmt(f)
+                    .and(f.write_char(' '))
+                    .and(f.write_str(stringify!($target)))
+            }
+        }
+    };
+}
 
 pub type NumSamples = usize;
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, Display, Clone, Copy, PartialEq, PartialOrd, From, Add, Sub, Mul, Div)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, From, Add, Sub, Mul, Div)]
 pub struct mWh(pub f32);
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, Display, Clone, Copy, PartialEq, PartialOrd, From, Add, Sub, Mul, Div)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, From, Add, Sub, Mul, Div)]
 pub struct μWh(pub f32);
 
 impl From<μWh> for mWh {
@@ -26,6 +44,9 @@ impl From<μWh> for mWh {
         Self(value.0 / 1000.0)
     }
 }
+
+display_suffix!(mWh);
+display_suffix!(μWh);
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct Datapoint {
@@ -117,6 +138,14 @@ where
 
     #[must_use]
     pub fn dataset(&self) -> &VecDeque<Datapoint> {
+        &self.dataset
+    }
+}
+
+impl<'a, T> Deref for Measurement<'a, T> {
+    type Target = VecDeque<Datapoint>;
+
+    fn deref(&self) -> &Self::Target {
         &self.dataset
     }
 }
