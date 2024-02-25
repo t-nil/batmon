@@ -33,7 +33,7 @@ pub type NumSamples = usize;
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, From, Add, Sub, Mul, Div)]
-pub struct mWh(pub f32);
+pub struct mWh(pub f32); // TODO 
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, From, Add, Sub, Mul, Div)]

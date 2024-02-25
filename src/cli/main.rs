@@ -3,8 +3,9 @@ mod args;
 use std::any::{type_name, Any};
 
 use anyhow::Result;
-use batmon::{μWh, Measurement};
+use batmon::{μWh, Datapoint, Measurement};
 use chrono::Duration;
+use itertools::Itertools;
 use textplots::{Chart, Plot, Shape};
 
 const BAT_PATH: &str = "/sys/class/power_supply/BAT0/energy_now";
@@ -39,11 +40,16 @@ pub fn main() -> Result<()> {
         let elapsed_secs = ((count - 1) * Δt.num_milliseconds() as usize) as f32 / 1000.0; // n samples mean n-1 diffs
         let avg = sum / elapsed_secs;
 
-        Chart::new(300, 100, 0.0, N as f32)
+        let get_power = |dp: &Datapoint| dp.power.0;
+
+        //let (min, max) = match m.iter().map(get_power).minmax()
+        let last = m.front().map(get_power).unwrap_or(0f32);
+
+        Chart::new_with_y_range(300, 100, 0.0, N as f32, last - 500f32, last + 500f32)
             .lineplot(&Shape::Continuous(Box::new(|x| {
                 // this breaks if datapoints are not the same temporal distance
                 m.get(N.saturating_sub(x as usize))
-                    .map(|dp| dp.power.0)
+                    .map(get_power)
                     .unwrap_or(0.0)
             })))
             .display();
@@ -58,3 +64,26 @@ pub fn main() -> Result<()> {
         Ok(())
     })
 }
+
+trait AdditionalIteratorFns {
+    fn minmax(&self, default: Self::Item) -> (Self::Item, Self::Item)
+    where
+        Self::Item: Clone + PartialOrd;
+    type Item;
+}
+
+/*impl<X, T: Iterator<Item = X>> AdditionalIteratorFns for T {
+    type Item = X;
+
+    #[allow(unused)]
+    fn minmax(&self, default: Self::Item) -> (Self::Item, Self::Item)
+    where
+        Self::Item: Clone + PartialOrd,
+    {
+        match self.minmax(default) {
+            itertools::MinMaxResult::NoElements => (default.clone(), default),
+            itertools::MinMaxResult::OneElement(x) => (x.clone(), x),
+            itertools::MinMaxResult::MinMax(l, r) => (l, r),
+        }
+    }
+}*/
