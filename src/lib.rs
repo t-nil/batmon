@@ -1,11 +1,13 @@
 #![deny(clippy::all)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::default_trait_access)]
+#![feature(div_duration)]
 
 use std::{
+    borrow::BorrowMut as _,
     collections::VecDeque,
     fmt::{Display, Write},
-    fs,
+    fs, io,
     marker::PhantomData,
     ops::Deref,
     path::Path,
@@ -15,6 +17,7 @@ use std::{
 use anyhow::{Context, Result};
 use chrono::{DateTime, Duration, Local};
 use derive_more::{Add, Display, Div, From, Mul, Sub};
+use log::warn;
 
 macro_rules! display_suffix {
     ($target:ty) => {
@@ -33,7 +36,7 @@ pub type NumSamples = usize;
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, From, Add, Sub, Mul, Div)]
-pub struct mWh(pub f32); // TODO 
+pub struct mWh(pub f32); // TODO NaN etc
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, From, Add, Sub, Mul, Div)]
@@ -77,7 +80,7 @@ where
             start_time: DateTime::default(),
             interval,
             num_samples,
-            dataset: Default::default(),
+            dataset: VecDeque::with_capacity(num_samples),
             source: source.as_ref(),
             source_unit: Default::default(),
         }
@@ -92,12 +95,14 @@ where
     ///
     pub fn measure(&mut self, mut action: impl FnMut(&Self) -> Result<()>) -> Result<()> {
         self.start_time = Local::now();
-        self.dataset.reserve_exact(self.num_samples);
 
-        let mut last: DateTime<Local>;
+        #[cfg(any)]
+        {
+            let x = io::stdout().borrow_mut();
+            unsafe { libc::setvbuf(x, buffer, mode, size) }
+        }
 
         loop {
-            last = Local::now();
             let dp = self.read_datapoint()?;
 
             // update dataset
@@ -108,7 +113,7 @@ where
             action(self)?;
 
             // sleep till next measure
-            sleep(dbg!(self.how_long_to_sleep(last).to_std()?));
+            sleep(dbg!(self.how_long_to_sleep().to_std()?));
         }
     }
 
@@ -126,14 +131,22 @@ where
         Ok(dp)
     }
 
-    fn how_long_to_sleep(&self, _last: DateTime<Local>) -> Duration {
+    fn how_long_to_sleep(&self) -> Duration {
+        let interval = self
+            .interval
+            .to_std()
+            .expect("fits into std::time::Duration");
         // hack for missing modulo
-        let mut remainder = Local::now();
-        while remainder > self.start_time {
-            remainder -= self.interval;
-        }
+        let time_passed: std::time::Duration = (Local::now() - self.start_time)
+            .to_std()
+            .expect("Running longer than can fit in std::time::Duration");
 
-        self.start_time - remainder
+        let time_factor_since_start = time_passed.div_duration_f64(interval);
+
+        let time_until_next =
+            interval.mul_f64(time_factor_since_start.ceil() - time_factor_since_start);
+
+        Duration::from_std(time_until_next).expect("Result doesn't fit into chrono::TimeDelta")
     }
 
     #[must_use]
